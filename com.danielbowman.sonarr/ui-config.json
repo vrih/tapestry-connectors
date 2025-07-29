@@ -1,0 +1,10 @@
+{
+	"inputs": [
+		{
+			"name": "apiKey",
+			"type": "text",
+      "placeholder": "xxx",
+			"prompt": "Sonarr API Key"
+		}
+	]
+}

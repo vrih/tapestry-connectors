@@ -1,0 +1,9 @@
+{"id":"com.danielbowman.sonarr",
+  "display_name": "sonarr",
+  "icon": "https://avatars.githubusercontent.com/u/1082903?s=280&v=4",
+  "service_name": "Sonarr",
+  "item_style": "post",
+  "provides_attachments": true,
+  "need_verification": true,
+  "verify_variables": true
+}
