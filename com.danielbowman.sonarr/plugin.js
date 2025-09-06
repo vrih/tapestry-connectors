@@ -1,54 +1,68 @@
-function getData(path) {
-  const headers = {"X-Api-Key": apiKey, "accept": "application/json"};
-  return sendRequest(path, "GET", null, headers);
+function getData(path, method = 'GET', body = null) {
+  const headers = { "X-Api-Key": apiKey, "accept": "application/json" };
+  return sendRequest(path, method, body, headers);
 }
 
-function load(){
-  let date = new Date();
-  date.setDate(date.getDate() - 1);
-  const endpoint = site + "/api/v3/history/since?eventType=downloadFolderImported&date=" + date.toISOString();
-  getData(endpoint)
-    .then((text) => JSON.parse(text))
-    .then((json) => {
-      const items = json.map((el) => {
-        return getData(site + "/api/v3/episode/" + el.episodeId)
-          .then((response) => { 
-            const d = JSON.parse(response);
-            let elDate = new Date(el.date);
-            let elUri = endpoint + `&id=${el.id}`;
-            let item = Item.createWithUriDate(elUri, elDate)
-            item.title = `${d.series.title} - ${d.title} S${d.seasonNumber}E${d.episodeNumber}`
-            item.body = `<p>${d.overview}</p>`
-
-            if(d.images[0].remoteUrl != undefined) {
-              let mediaAttachment = MediaAttachment.createWithUrl(d.images[0].remoteUrl);
-              item.attachments = [mediaAttachment];
-            }
-            return item;
-          })
-      });
-      return Promise.all(items);
-    })
-    .then((items) => {
-      processResults(items);
-    })
-    .catch((requestError) => {
-      processError(requestError);
-    });
-
-
-
+function getPastDate(daysAgo) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return date.toISOString();
 }
 
-function verify(){
-  verifyAsync().then(processVerification).catch(processError)
-
+function extractImageUrl(images) {
+  return images && images[0] && images[0].remoteUrl;
 }
 
-async function verifyAsync() {
-  const url = `${site}/api/v3/ping`
-  const check = JSON.parse(await getData(url))
-  // all we need to know is that getting data didn't fail
-  return "Healthchecks"
+async function load() {
+  try {
+    const daysAgo = 10;
+    const endpoint = `${site}/api/v3/history/since?eventType=downloadFolderImported&date=${getPastDate(daysAgo)}`;
+
+    const responseText = await getData(endpoint);
+    const historyEntries = JSON.parse(responseText);
+
+    const items = await Promise.all(
+      historyEntries.map(async (el) => {
+        const episodeUrl = `${site}/api/v3/episode/${el.episodeId}`;
+        const episodeResponse = await getData(episodeUrl);
+        const episode = JSON.parse(episodeResponse);
+        const episodeUiUrl = `${site}/series/${episode.series.titleSlug}#${el.episodeId}`
+
+        const itemDate = new Date(el.date);
+        const elUri = `${endpoint}&id=${el.id}`;
+        const item = Item.createWithUriDate(episodeUiUrl, itemDate);
+
+        item.title = `${episode.series.title} - ${episode.title} S${episode.seasonNumber}E${episode.episodeNumber}`;
+        item.body = `<p>${episode.overview}</p>`;
+
+        const imageUrl = extractImageUrl(episode.images);
+        if (imageUrl) {
+          const mediaAttachment = MediaAttachment.createWithUrl(imageUrl);
+          item.attachments = [mediaAttachment];
+        }
+
+        return item;
+      })
+    );
+
+    processResults(items);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      console.error('Failed to parse JSON:', error);
+    } else {
+      console.error('Error occurred:', error);
+    }
+    processError(error);
+  }
 }
 
+async function verify() {
+  try {
+    const url = `${site}/api/v3/ping`;
+    const response = await getData(url);
+    JSON.parse(response);
+    processVerification("Healthchecks");
+  } catch (error) {
+    processError(error);
+  }
+}
